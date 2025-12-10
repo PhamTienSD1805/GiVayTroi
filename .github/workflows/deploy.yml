@@ -1,1 +1,73 @@
+name: Deploy to GitHub Pages
 
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        
+    - name: Install dependencies (if package.json exists)
+      run: |
+        if [ -f package.json ]; then
+          npm ci
+          npm run build --if-present
+        else
+          echo "No package.json found, deploying static files"
+        fi
+        
+    - name: Setup Pages
+      uses: actions/configure-pages@v3
+      
+    - name: Prepare deployment files
+      run: |
+        mkdir -p _site
+        if [ -d dist ]; then
+          cp -r dist/* _site/
+        elif [ -d build ]; then
+          cp -r build/* _site/
+        else
+          cp -r *.html *.css *.js _site/ 2>/dev/null || true
+          cp -r assets images js css _site/ 2>/dev/null || true
+        fi
+        ls -la _site/
+        
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: '_site'
+        
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v2
+      
+    - name: Deployment summary
+      run: |
+        echo "# 🚀 Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Your website has been deployed to GitHub Pages" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "🔗 **URL**: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "⏰ **Deployed at**: $(date)" >> $GITHUB_STEP_SUMMARY
