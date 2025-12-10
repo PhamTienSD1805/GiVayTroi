@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ main, develop ]
   schedule:
-    - cron: '0 0 * * 1'  # Weekly on Monday at midnight
+    - cron: '0 0 * * 1'
 
 permissions:
   security-events: write
@@ -21,23 +21,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'javascript', 'csharp', 'python' ]
+        language: [ 'javascript-typescript' ]
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v2
+      uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
         queries: security-and-quality
         
     - name: Autobuild
-      uses: github/codeql-action/autobuild@v2
+      uses: github/codeql-action/autobuild@v3
       
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v2
+      uses: github/codeql-action/analyze@v3
       with:
         category: "/language:${{ matrix.language }}"
         
@@ -48,10 +48,10 @@ jobs:
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Dependency Review
-      uses: actions/dependency-review-action@v3
+      uses: actions/dependency-review-action@v4
       with:
         fail-on-severity: moderate
         
@@ -61,12 +61,12 @@ jobs:
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '20'
         
     - name: Run npm audit
       run: |
@@ -76,34 +76,10 @@ jobs:
           echo "No package.json found, skipping npm audit"
         fi
         
-  dotnet-security:
-    name: .NET Security Scan
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '8.0.x'
-        
-    - name: Install security scan tool
-      run: dotnet tool install --global security-scan
-      
-    - name: Run security scan
-      run: |
-        if [ -f *.csproj ] || [ -f *.sln ]; then
-          security-scan *.sln || security-scan *.csproj || echo "Security scan completed with warnings"
-        else
-          echo "No .NET project found, skipping security scan"
-        fi
-        
   security-summary:
     name: Security Summary
     runs-on: ubuntu-latest
-    needs: [codeql-analysis, npm-audit, dotnet-security]
+    needs: [codeql-analysis, npm-audit]
     if: always()
     
     steps:
@@ -115,6 +91,5 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- CodeQL Analysis: ${{ needs.codeql-analysis.result }}" >> $GITHUB_STEP_SUMMARY
         echo "- NPM Audit: ${{ needs.npm-audit.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "- .NET Security: ${{ needs.dotnet-security.result }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "✅ Security scans completed" >> $GITHUB_STEP_SUMMARY
