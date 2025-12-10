@@ -1,1 +1,140 @@
+name: Test
 
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test-npm:
+    name: NPM Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        
+    - name: Install dependencies
+      run: |
+        if [ -f package.json ]; then
+          npm ci
+        else
+          echo "No package.json found, creating minimal setup"
+          npm init -y
+        fi
+        
+    - name: Run tests
+      run: |
+        if [ -f package.json ] && grep -q "\"test\"" package.json; then
+          npm test
+        else
+          echo "No test script found, skipping npm test"
+        fi
+        
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: npm-test-results
+        path: coverage/
+        retention-days: 7
+
+  test-pytest:
+    name: PyTest
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        if [ -f requirements.txt ]; then
+          pip install -r requirements.txt
+        fi
+        pip install pytest pytest-cov
+        
+    - name: Run pytest
+      run: |
+        if [ -d tests ] || [ -f test_*.py ]; then
+          pytest --cov=. --cov-report=xml --cov-report=html
+        else
+          echo "No Python tests found, skipping pytest"
+        fi
+        
+    - name: Upload pytest results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: pytest-results
+        path: |
+          htmlcov/
+          coverage.xml
+        retention-days: 7
+
+  test-junit:
+    name: JUnit Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.0.x'
+        
+    - name: Restore dependencies
+      run: |
+        if [ -f *.csproj ] || [ -f *.sln ]; then
+          dotnet restore
+        else
+          echo "No .NET project found"
+        fi
+        
+    - name: Run tests
+      run: |
+        if [ -f *.csproj ] || [ -f *.sln ]; then
+          dotnet test --configuration Release --no-restore --verbosity normal --logger "trx;LogFileName=test-results.trx"
+        else
+          echo "No .NET tests found, skipping dotnet test"
+        fi
+        
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: junit-test-results
+        path: |
+          **/test-results.trx
+          **/TestResults/
+        retention-days: 7
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [test-npm, test-pytest, test-junit]
+    if: always()
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      
+    - name: Create test summary
+      run: |
+        echo "# Test Results Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "✅ All test jobs completed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- NPM Tests: ${{ needs.test-npm.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- PyTest: ${{ needs.test-pytest.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- JUnit Tests: ${{ needs.test-junit.result }}" >> $GITHUB_STEP_SUMMARY
